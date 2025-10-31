@@ -1,0 +1,9 @@
+add_executable(lab5
+        DataPacket.h
+        PacketProtocol.h
+        PacketProtocol.cpp
+        TcpClient.h
+        TcpClient.cpp
+        TcpServer.h
+        TcpServer.cpp
+        main.cpp)
