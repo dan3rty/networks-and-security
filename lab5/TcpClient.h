@@ -6,7 +6,7 @@
 class TcpClient
 {
 public:
-	TcpClient(const std::string& serverIp, uint16_t port, const std::string& name);
+	TcpClient(std::string serverIp, uint16_t port, std::string name);
 
 	void run() const;
 

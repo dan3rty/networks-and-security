@@ -1,5 +1,5 @@
 #include "TcpServer.h"
-#include "PacketProtocol.h"
+#include "CommunicationPacket.h"
 #include <arpa/inet.h>
 #include <cstring>
 #include <iostream>
@@ -7,10 +7,11 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <utility>
 
-TcpServer::TcpServer(const uint16_t port, const std::string& name)
+TcpServer::TcpServer(const uint16_t port, std::string name)
 	: m_port(port)
-	, m_serverName(name)
+	, m_serverName(std::move(name))
 	, m_listeningSocketFd(-1)
 	, m_shouldStop(false)
 {
@@ -91,29 +92,38 @@ void TcpServer::run()
 	std::cout << "Server shutdown sequence complete." << std::endl;
 }
 
-void TcpServer::handleClient(const int clientSocketFd)
+void TcpServer::handleClient(int clientSocketFd)
 {
-	DataPacket receivedPacket;
+	CommunicationPacket receivedPacket{};
 
-	if (!PacketProtocol::receivePacket(clientSocketFd, receivedPacket))
+	ssize_t bytesReceived = recv(clientSocketFd, &receivedPacket, sizeof(receivedPacket), 0);
+
+	if (bytesReceived <= 0)
 	{
-		std::cerr << "Failed to receive packet from client." << std::endl;
+		perror("recv failed or connection closed");
 		return;
 	}
 
+	receivedPacket.number = ntohl(receivedPacket.number);
+	receivedPacket.name[MAX_NAME_LENGTH - 1] = '\0';
+	const std::string clientName(receivedPacket.name);
+
 	std::cout << "--- Server-side Info ---" << std::endl;
-	std::cout << "Client Name: " << receivedPacket.senderName << std::endl;
+	std::cout << "Client Name: " << clientName << std::endl;
 	std::cout << "Server Name: " << m_serverName << std::endl;
 	std::cout << "Client Number: " << receivedPacket.number << std::endl;
 	std::cout << "Server Number: " << m_serverNumber << std::endl;
 	std::cout << "Sum: " << receivedPacket.number + m_serverNumber << std::endl;
 	std::cout << "------------------------" << std::endl;
 
-	std::cout << "Sending response to client..." << std::endl;
-	DataPacket responsePacket = { m_serverName, m_serverNumber };
-	if (!PacketProtocol::sendPacket(clientSocketFd, responsePacket))
+	CommunicationPacket responsePacket{};
+	strncpy(responsePacket.name, m_serverName.c_str(), MAX_NAME_LENGTH - 1);
+	responsePacket.name[MAX_NAME_LENGTH - 1] = '\0';
+	responsePacket.number = htonl(m_serverNumber);
+
+	if (send(clientSocketFd, &responsePacket, sizeof(responsePacket), 0) < 0)
 	{
-		std::cerr << "Failed to send response to client." << std::endl;
+		perror("send failed");
 	}
 	else
 	{

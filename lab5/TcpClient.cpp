@@ -1,5 +1,5 @@
 #include "TcpClient.h"
-#include "PacketProtocol.h"
+#include "CommunicationPacket.h"
 #include <arpa/inet.h>
 #include <cstring>
 #include <iostream>
@@ -8,11 +8,12 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <utility>
 
-TcpClient::TcpClient(const std::string& serverIp, const uint16_t port, const std::string& name)
-	: m_serverIp(serverIp)
+TcpClient::TcpClient(std::string serverIp, const uint16_t port, std::string name)
+	: m_serverIp(std::move(serverIp))
 	, m_port(port)
-	, m_clientName(name)
+	, m_clientName(std::move(name))
 {
 	std::cout << "Client '" << m_clientName << "' is being created." << std::endl;
 }
@@ -68,28 +69,38 @@ void TcpClient::run() const
 	const int32_t numberToSend = getUserInput();
 	const int sockFd = connectToServer();
 
+	CommunicationPacket packetToSend{};
+	strncpy(packetToSend.name, m_clientName.c_str(), MAX_NAME_LENGTH - 1);
+	packetToSend.name[MAX_NAME_LENGTH - 1] = '\0';
+	packetToSend.number = htonl(numberToSend);
+
 	std::cout << "Sending data to server..." << std::endl;
-	DataPacket packetToSend = { m_clientName, numberToSend };
-	if (!PacketProtocol::sendPacket(sockFd, packetToSend))
+	if (send(sockFd, &packetToSend, sizeof(packetToSend), 0) < 0)
 	{
-		std::cerr << "Failed to send data." << std::endl;
+		perror("send failed");
 		close(sockFd);
 		return;
 	}
 	std::cout << "Data sent successfully." << std::endl;
 
 	std::cout << "Waiting for response from server..." << std::endl;
-	DataPacket receivedPacket;
-	if (!PacketProtocol::receivePacket(sockFd, receivedPacket))
+	CommunicationPacket receivedPacket{};
+	const ssize_t bytesReceived = recv(sockFd, &receivedPacket, sizeof(receivedPacket), 0);
+
+	if (bytesReceived <= 0)
 	{
-		std::cerr << "Failed to receive response." << std::endl;
+		perror("recv failed or connection closed");
 	}
 	else
 	{
+		receivedPacket.number = ntohl(receivedPacket.number);
+		receivedPacket.name[MAX_NAME_LENGTH - 1] = '\0';
+		const std::string serverName(receivedPacket.name);
+
 		std::cout << "Response received." << std::endl;
 		std::cout << "\n--- Client-side Info ---" << std::endl;
 		std::cout << "My (Client) Name: " << m_clientName << std::endl;
-		std::cout << "Server Name: " << receivedPacket.senderName << std::endl;
+		std::cout << "Server Name: " << serverName << std::endl;
 		std::cout << "My (Client) Number: " << numberToSend << std::endl;
 		std::cout << "Server Number: " << receivedPacket.number << std::endl;
 		std::cout << "Sum: " << numberToSend + receivedPacket.number << std::endl;

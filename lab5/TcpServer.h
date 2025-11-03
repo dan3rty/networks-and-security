@@ -6,7 +6,7 @@
 class TcpServer
 {
 public:
-	TcpServer(uint16_t port, const std::string& name);
+	TcpServer(uint16_t port, std::string  name);
 	~TcpServer();
 
 	void run();
