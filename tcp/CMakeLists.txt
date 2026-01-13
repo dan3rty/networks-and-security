@@ -1,4 +1,4 @@
-add_executable(lab5
+add_executable(tcp
         CommunicationPacket.h
         TcpClient.h
         TcpClient.cpp
